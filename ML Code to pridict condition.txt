@@ -1,0 +1,163 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import joblib
+import random
+from sklearn.preprocessing import PolynomialFeatures, StandardScaler
+from xgboost import XGBRegressor
+from sklearn.model_selection import GridSearchCV, train_test_split
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+
+# Load Data
+file_path = "spraying_conditions_data.csv"
+df = pd.read_csv(file_path)
+
+# Convert Date column to datetime
+df['Date'] = pd.to_datetime(df['Date'])
+df['Hour'] = df['Date'].dt.hour
+df['DayOfWeek'] = df['Date'].dt.dayofweek
+df['Month'] = df['Date'].dt.month
+
+# Aggregate hourly data
+df['Day'] = df['Date'].dt.date
+hourly_avg = df.groupby(['Day', 'Hour'])[['Temperature (°C)', 'Humidity (%)']].mean().reset_index()
+
+# Add previous hour's temperature and humidity
+hourly_avg['Previous_Temp'] = hourly_avg['Temperature (°C)'].shift(1).bfill()
+hourly_avg['Previous_Humidity'] = hourly_avg['Humidity (%)'].shift(1).bfill()
+
+# Prepare Features
+X = hourly_avg[['Hour', 'Previous_Temp', 'Previous_Humidity']].values
+y_temp = hourly_avg['Temperature (°C)']
+y_humidity = hourly_avg['Humidity (%)']
+
+# Polynomial Features (Degree 4 for non-linearity)
+poly = PolynomialFeatures(degree=4)
+X_poly = poly.fit_transform(X)
+
+# Standard Scaling
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X_poly)
+
+# Train-Test Split
+X_train, X_test, y_temp_train, y_temp_test = train_test_split(X_scaled, y_temp, test_size=0.2, random_state=42)
+_, _, y_humidity_train, y_humidity_test = train_test_split(X_scaled, y_humidity, test_size=0.2, random_state=42)
+
+# Hyperparameter Tuning
+param_grid = {
+    'n_estimators': [100, 200, 500],
+    'max_depth': [4, 6, 8],
+    'learning_rate': [0.01, 0.05, 0.1]
+}
+
+grid_search_temp = GridSearchCV(XGBRegressor(), param_grid, cv=5, scoring='r2', n_jobs=-1, verbose=1)
+grid_search_temp.fit(X_train, y_temp_train)
+
+grid_search_humidity = GridSearchCV(XGBRegressor(), param_grid, cv=5, scoring='r2', n_jobs=-1, verbose=1)
+grid_search_humidity.fit(X_train, y_humidity_train)
+
+# Train Optimized Models
+model_temp = XGBRegressor(**grid_search_temp.best_params_).fit(X_train, y_temp_train)
+model_humidity = XGBRegressor(**grid_search_humidity.best_params_).fit(X_train, y_humidity_train)
+
+# Predict Next 24 Hours
+future_hours = np.arange(0, 24).reshape(-1, 1)
+future_previous_temp = [y_temp.iloc[-1]] * 24
+future_previous_humidity = [y_humidity.iloc[-1]] * 24
+
+future_X = np.column_stack((future_hours, future_previous_temp, future_previous_humidity))
+future_X_poly = poly.transform(future_X)
+future_X_scaled = scaler.transform(future_X_poly)
+
+pred_temp_24hr = model_temp.predict(future_X_scaled)
+pred_humidity_24hr = model_humidity.predict(future_X_scaled)
+
+# Add Slight Variation
+pred_temp_24hr = [temp + random.uniform(-1.5, 1.5) for temp in pred_temp_24hr]
+pred_humidity_24hr = [humidity + random.uniform(-3, 3) for humidity in pred_humidity_24hr]
+
+# Smooth Values using Rolling Average
+def smooth_values(values, window=3):
+    return np.convolve(values, np.ones(window)/window, mode='same')
+
+pred_temp_24hr = smooth_values(pred_temp_24hr)
+pred_humidity_24hr = smooth_values(pred_humidity_24hr)
+
+# Define Spraying Condition Classification
+def classify_condition(temp, humidity):
+    if (10 <= temp <= 30 and 30 <= humidity <= 60) or (15 <= temp <= 40 and 60 <= humidity <= 80):
+        return "✅ Ideal"
+    elif (5 <= temp <= 40 and 20 <= humidity <= 30) or (25 <= temp <= 45 and 30 <= humidity <= 50) or (30 <= temp <= 45 and 50 <= humidity <= 70):
+        return "⚠️ Marginal"
+    else:
+        return "❌ Non-Ideal"
+
+spraying_conditions = [classify_condition(temp, humidity) for temp, humidity in zip(pred_temp_24hr, pred_humidity_24hr)]
+
+# Print Predictions
+print("\n🌿 Spraying Condition Predictions 🌿\n")
+print(f"{'Hour':<5}{'Temp (°C)':<12}{'Humidity (%)':<15}{'Condition'}")
+print("-" * 50)
+
+for hour, (temp, humidity, condition) in enumerate(zip(pred_temp_24hr, pred_humidity_24hr, spraying_conditions)):
+    print(f"{hour:<5}{temp:<12.2f}{humidity:<15.2f}{condition}")
+
+print("\n✅ Predictions Complete!\n")
+
+# Model Evaluation
+y_temp_pred = model_temp.predict(X_test)
+y_humidity_pred = model_humidity.predict(X_test)
+
+mae_temp = mean_absolute_error(y_temp_test, y_temp_pred)
+mse_temp = mean_squared_error(y_temp_test, y_temp_pred)
+r2_temp = r2_score(y_temp_test, y_temp_pred)
+
+mae_humidity = mean_absolute_error(y_humidity_test, y_humidity_pred)
+mse_humidity = mean_squared_error(y_humidity_test, y_humidity_pred)
+r2_humidity = r2_score(y_humidity_test, y_humidity_pred)
+
+print("\n📊 **Model Accuracy Report** 📊")
+print(f"🌡️ Temperature Prediction:")
+print(f"✅ MAE: {mae_temp:.2f}, MSE: {mse_temp:.2f}, R² Score: {r2_temp:.2f}")
+
+print(f"💧 Humidity Prediction:")
+print(f"✅ MAE: {mae_humidity:.2f}, MSE: {mse_humidity:.2f}, R² Score: {r2_humidity:.2f}")
+
+# Save Models for Future Use
+joblib.dump(model_temp, "model_temp.pkl")
+joblib.dump(model_humidity, "model_humidity.pkl")
+joblib.dump(poly, "poly.pkl")
+joblib.dump(scaler, "scaler.pkl")
+
+print("\n✅ Models saved successfully!")
+
+# Plot Graphs
+plt.figure(figsize=(12, 6))
+
+# Temperature Prediction
+plt.subplot(1, 3, 1)
+plt.plot(range(24), pred_temp_24hr, marker='o', linestyle='-', label='Predicted Temperature', color='b')
+plt.xlabel('Hour')
+plt.ylabel('Temperature (°C)')
+plt.title('Temperature Prediction')
+plt.legend()
+
+# Humidity Prediction
+plt.subplot(1, 3, 2)
+plt.plot(range(24), pred_humidity_24hr, marker='s', linestyle='-', color='r', label='Predicted Humidity')
+plt.xlabel('Hour')
+plt.ylabel('Humidity (%)')
+plt.title('Humidity Prediction')
+plt.legend()
+
+# Spraying Conditions
+plt.subplot(1, 3, 3)
+colors = ['green' if c == "✅ Ideal" else 'yellow' if c == "⚠️ Marginal" else 'red' for c in spraying_conditions]
+plt.bar(range(24), [1 if c == "✅ Ideal" else (0 if c == "⚠️ Marginal" else -1) for c in spraying_conditions], color=colors)
+plt.xlabel('Hour')
+plt.ylabel('Condition')
+plt.title('Spraying Condition Classification')
+plt.yticks([-1, 0, 1], ["❌ Non-Ideal", "⚠️ Marginal", "✅ Ideal"])
+
+plt.tight_layout()
+plt.show()

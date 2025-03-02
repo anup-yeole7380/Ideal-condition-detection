@@ -1,0 +1,181 @@
+// Your WiFi credentials.
+// Set password to "" for open networks.
+char ssid[] = "Airtel_Microworld";///Enter your wifi name
+char pass[] = "Microworld123";// Enter wifi password
+#define DHTPIN 32         // What digital pin we're connected to select yours accordingly
+// Uncomment whatever type you're using!
+#define DHTTYPE DHT11     // DHT 11
+DHT dht(DHTPIN, DHTTYPE);
+BlynkTimer timer;
+float value = 200; //add
+float h,t;
+#define ONBOARD_LED  2
+#define Buzzer 5
+int sensorPin1 = 36;    // select the input pin for the potentiometer A0 36
+int sensorValue1 = 0;  // variable to store the value coming from the sensor
+int count =0;
+float t1=0;
+float h1=0;
+void sendSensor()
+{
+   h = dht.readHumidity();
+   t = dht.readTemperature(); // or dht.readTemperature(true) for Fahrenheit
+
+  if (isnan(h) || isnan(t)) {
+    Serial.println("Failed to read from DHT sensor!");
+    return;
+  }
+ 
+}
+
+void setup()
+{
+  pinMode(ONBOARD_LED,OUTPUT);
+  pinMode(Buzzer,OUTPUT);
+  digitalWrite(Buzzer, LOW);//OFF
+  digitalWrite(ONBOARD_LED, LOW);  //OFF EX FAN
+  Serial.begin(115200);
+  delay(1000);
+  Blynk.begin(auth, ssid, pass);
+  dht.begin();
+  sensorValue1 = analogRead(sensorPin1);
+    // Setup a function to be called every second
+  timer.setInterval(1000L, sendSensor);
+   lcd.begin(); // If you are using more I2C devices using the Wire library use lcd.begin(false)
+                 // this stop the library(LCD_I2C) from calling Wire.begin()
+  lcd.backlight();
+  
+  
+}
+
+void loop()
+{
+   Blynk.run();
+   timer.run();
+   Display_Value();
+   delay(1000);                                   // wait 100ms for next reading 
+   lcd.clear();  
+   sensorValue1 = analogRead(sensorPin1);
+   Read_Anlog_Sensor();
+  
+}
+
+void Read_Anlog_Sensor()
+{
+sensorValue1 = analogRead(36);       // read analog input pin 0
+sensorValue1 = sensorValue1 + 1090;//calibration
+
+
+
+lcd.setCursor(0,1);
+lcd.print("SS=");
+lcd.setCursor(3,1);
+lcd.print(sensorValue2,DEC);//Rain S1
+/******************************/
+  delay(1000);
+  delay(1000);                                   // wait 100ms for next reading 
+  lcd.clear();  
+ if(sensorValue2>1150)
+ {
+    lcd.clear(); 
+    lcd.setCursor(0, 0);
+    lcd.print("Wind Alert !!!  ");
+    delay(1000);
+ 
+  }
+  
+}
+
+
+void Display_Value()
+{
+  
+    lcd.clear(); 
+    lcd.setCursor(0, 0); 
+    lcd.print("Temp="); // You can make spaces using well... spaces Temperature = humidity
+    lcd.setCursor(5, 0); 
+    value =t;
+    t1=t;
+    lcd.print(value);
+    lcd.print(6, 0);
+    lcd.print("C");
+    
+    Serial.print(" ");
+    Serial.println(value);
+    lcd.setCursor(10, 0); // Or setting the cursor in the desired position.
+    lcd.print("Hum=");
+    lcd.setCursor(14, 0);
+    value =h;
+    h1=h;
+    Serial.print(" ");
+    Serial.println(value);
+    lcd.print(value);
+    Serial.println(count);
+      count++;
+    if (count >=25)
+    {
+  Blynk.virtualWrite(V1, h); // select your virtual pins accordingly
+  Blynk.virtualWrite(V2, t); // select your virtual pins accordingly
+     count =0;
+      }
+   delay(1000);                                   // wait 100ms for next reading 
+   lcd.clear(); 
+      // Function to determine spraying conditions
+  // Based on the graph, determine the condition:
+  if ((t1 >= 10 && t1 <= 30 && h1 >= 30 && h1 <= 60) ||
+      (t1 >= 15 && t1 <= 40 && h1 >= 60 && h1 <= 80))
+  {
+    lcd.clear(); 
+    lcd.setCursor(0, 0);
+    lcd.print("Ideal Cond.");
+    delay(1000);
+    led1.on();led2.off();led3.off();
+  } else if ((t1 >= 5 && t1 <= 40 && h1 >= 20 && h1 <= 30) ||
+             (t1 >= 25 && t1 <= 45 && h1 >= 30 && h1 <= 50) ||
+             (t1 >= 30 && t1 <= 45 && h1 >= 50 && h1 <= 70))
+   {
+    lcd.clear(); 
+    lcd.setCursor(0, 0);
+    lcd.print("Marginal Cond.");
+    delay(1000);
+    led1.off();led2.on();led3.off();
+  } else 
+  {
+    lcd.clear(); 
+    lcd.setCursor(0, 0);
+    lcd.print("Non-Ideal Cond.");
+    delay(1000);
+    led1.off();led2.off();led3.on();
+  }
+}
+
+void welcome()
+{
+   
+   
+    lcd.clear();
+    lcd.setCursor(0,0);
+    lcd.print("Conecting ...   "); // You can make spaces using well... spaces
+    lcd.setCursor(0, 1); // Or setting the cursor in the desired position.
+    lcd.print("Cloud Plz Wait..");
+    delay(3000);
+    lcd.clear(); //Iot based air pollution monitoring system for smart city
+
+    lcd.setCursor(0,0);
+    lcd.print("  Welcome to    "); // You can make spaces using well... spaces
+    lcd.setCursor(0, 1); // Or setting the cursor in the desired position.
+    lcd.print("MET BKC IOE NSK ");
+    delay(3000);
+    lcd.clear();
+
+
+    lcd.setCursor(0,0);
+    lcd.print("17B             "); // You can make spaces using well... spaces
+    lcd.setCursor(0, 1); // Or setting the cursor in the desired position.
+    lcd.print("                ");
+    delay(3000);
+    lcd.clear();
+
+    
+  
+}

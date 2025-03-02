@@ -1,0 +1,33 @@
+#define SENSOR_PIN A0  // Analog pin for sensor
+#define GREEN_LED 6    // Green LED pin
+#define RED_LED 7      // Red LED pin
+
+void setup() {
+    Serial.begin(9600);
+    pinMode(GREEN_LED, OUTPUT);
+    pinMode(RED_LED, OUTPUT);
+}
+
+void loop() {
+    int sensorValue = analogRead(SENSOR_PIN);  // Read analog sensor value
+    Serial.print("Sensor Value: ");
+    Serial.println(sensorValue);  // Print value to Serial Monitor
+   // delay(1000);  // Delay 1 second
+
+
+    // Control LEDs based on sensor value
+    if (sensorValue >= 12 && sensorValue <= 35) {
+        digitalWrite(GREEN_LED, HIGH);
+        digitalWrite(RED_LED, LOW);
+    } 
+    //else if (sensorValue > 17) {
+        //digitalWrite(GREEN_LED, LOW);
+        //digitalWrite(RED_LED, HIGH);
+    //} 
+    else {
+        digitalWrite(GREEN_LED, LOW);
+        digitalWrite(RED_LED, HIGH);
+    }
+
+    delay(1000);  // Delay for stability
+}
